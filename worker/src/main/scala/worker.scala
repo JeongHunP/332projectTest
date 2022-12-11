@@ -62,7 +62,6 @@ object Worker {
 
       /*@@@@@ range phase @@@@@*/
       val rangeReply = client.getRange()
-      rangeReply.ranges.foreach(println)
 
       // getid, subranges
       val id = Utils.getId(rangeReply, localhostIP)

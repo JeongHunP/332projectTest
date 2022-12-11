@@ -92,26 +92,4 @@ class FileClient(
     // Mark the end of requests
     requestObserver.onCompleted()
   }
-
-  // def sendPartition(to: String, inputpaths: List[String], outputpath: String): SendPartitionReply = {
-  //   logger.info("[Shuffle] Try to send partition from" + localhostIP + "to" + to)
-  //   val fromaddr = sAddress(localhostIP, port)
-  // val choosenFiles = inputpaths.filter(_.split("/").last.split("_")(1) == to)
-  // val filenames = choosenFiles.map(file => file.split("/").last)
-  //   var partitions:Seq[partitionFile] = Seq() 
-  //   for(i <- choosenFiles){
-  //     partitions = partitions :+ Utils.getPartitionFile(i)
-  //   }
-  //   val request = SendPartitionRequest(Some(fromaddr), partitions, filenames.toSeq, outputpath)
-  //   try{
-  //       val response = blockingStub.sendPartition(request)
-  //       response
-  //   }catch{
-  //       case e: StatusRuntimeException =>
-
-  //       logger.log(Level.WARNING, "RPC failed: {0}", e.getStatus)
-
-  //       SendPartitionReply(sResultType.FAILURE)
-  //   }
-  // }
 }

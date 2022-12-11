@@ -13,8 +13,6 @@ class keyRangeGenerator(
   val temp = allSamples.map(x => x.toStringUtf8)
   val sortedSamples = temp.sortWith((s1, s2) => Utils.comparator(s1, s2))
   
-  // val sortedSamples = Utils.convertToimmutable(sortedSample)
-  // val sortedSamples = sortedSample.map(x:ByteString => x.toString("UTF-8"))
 
   def generateKeyrange(): Seq[Range] = {
     val numPoints = numWorkers - 1
@@ -28,23 +26,12 @@ class keyRangeGenerator(
     for (i <- remain * (term + 1) + term to sortedSamples.length - 1 by term) {
       points = points :+ i
     }
-
-    println("sortedSamples")
-    sortedSamples.foreach(println)
-
-    println("points")
-    points.foreach(println)
-    println("points length",points.length.toString())
-
     var ranges: Buffer[Range] = Buffer()
     for (i <- 0 to points.length - 1) {
-      println("i value",i.toString())
       if (i == 0) {
-        println("in if")
         var el = Range("          ", sortedSamples(points.head))
         ranges = ranges :+ el
       } else {
-        println("in else")
         var el = Range(sortedSamples(points(i-1)), sortedSamples(points(i)))
         ranges = ranges :+ el
       }
