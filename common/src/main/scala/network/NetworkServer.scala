@@ -36,7 +36,7 @@ import common.{WorkerState, WorkerInfo}
 import scala.concurrent.duration.Duration
 import scala.util.{Success, Failure}
 import scala.concurrent.ExecutionContext.Implicits.global
-
+import scala.concurrent._
 object NetworkServer {
   private val logger =
     Logger.getLogger(classOf[NetworkServer].getName)
@@ -94,7 +94,6 @@ class NetworkServer(executionContext: ExecutionContext, numClients: Int) {
     }
   }
 
-
   /* *** Master's functions *** */
   private class NetworkImpl extends NetworkGrpc.Network {
     override def connection(req: ConnectionRequest): Future[ConnectionReply] = {
@@ -139,51 +138,55 @@ class NetworkServer(executionContext: ExecutionContext, numClients: Int) {
       }
     }
 
-    override def sampling(replyObserver: StreamObserver[SamplingReply]): StreamObserver[SamplingRequest] = {
+    override def sampling(
+        replyObserver: StreamObserver[SamplingReply]
+    ): StreamObserver[SamplingRequest] = {
       NetworkServer.logger.info("[sample]: Worker tries to send sample")
 
-        new StreamObserver[SamplingRequest] {
-          var workerip:String = ""
-          var workerport:Int = -1
+      new StreamObserver[SamplingRequest] {
+        var workerip: String = ""
+        var workerport: Int = -1
 
-          override def onNext(request: SamplingRequest): Unit = {
-            workerip = request.addr.get.ip
-            workerport = request.addr.get.port
-            samples = samples :+ request.sample
-          }
-          override def onError(t: Throwable): Unit = {
-            NetworkServer.logger.warning("[sample]: Worker failed to send sample")
-            throw t
-          }
-          override def onCompleted(): Unit = {
-            NetworkServer.logger.info("[sample]: Worker done sending sample")
-            replyObserver.onNext(new SamplingReply(ResultType.SUCCESS))
-            replyObserver.onCompleted
-            
+        override def onNext(request: SamplingRequest): Unit = {
+          workerip = request.addr.get.ip
+          workerport = request.addr.get.port
+          samples = samples :+ request.sample
+          print("8")
+        }
+        override def onError(t: Throwable): Unit = {
+          NetworkServer.logger.warning("[sample]: Worker failed to send sample")
+          throw t
+        }
+        override def onCompleted(): Unit = {
+          print("9")
+          NetworkServer.logger.info("[sample]: Worker done sending sample")
+          replyObserver.onNext(new SamplingReply(ResultType.SUCCESS))
+          replyObserver.onCompleted
 
-            clientMap.synchronized {
+          clientMap.synchronized {
             for (i <- 1 to clientMap.size) {
               val workerInfo = clientMap(i)
               if (workerInfo.ip == workerip && workerInfo.port == workerport) {
                 val newWorkerInfo = new WorkerInfo(workerip, workerport)
                 newWorkerInfo.setWorkerState(state = WorkerState.Sampling)
                 clientMap = clientMap + (i -> newWorkerInfo)
-                }
               }
             }
-            addressList.synchronized {
+          }
+          addressList.synchronized {
             if (addressList.size != numClients) {
               for (i <- 1 to clientMap.size) {
                 val workerInfo = clientMap(i)
-                val address = Address(ip = workerInfo.ip, port = workerInfo.port)
+                val address =
+                  Address(ip = workerInfo.ip, port = workerInfo.port)
                 addressList = addressList :+ address
-                }
               }
             }
-
-            getkeyranges
           }
+
+          // getkeyranges
         }
+      }
     }
 
     override def range(req: RangeRequest): Future[RangeReply] = {
@@ -191,9 +194,26 @@ class NetworkServer(executionContext: ExecutionContext, numClients: Int) {
         case Some(addr) => addr
         case None       => Address(ip = "", port = 1) // TODO: error handling
       }
-      if (waitWhile(() => !isAllWorkersSameState(WorkerState.Range),100000)) {
+      keyranges.synchronized {
+        val keyRangesFuture = new keyRangeGenerator(samples, numClients)
+          .generateKeyrange()
+        keyranges = Await.result(keyRangesFuture, Duration.Inf)
+      }
+
+      clientMap.synchronized {
+        for (i <- 1 to clientMap.size) {
+          val workerInfo = clientMap(i)
+          if (workerInfo.ip == addr.ip && workerInfo.port == addr.port) {
+            val newWorkerInfo = new WorkerInfo(addr.ip, addr.port)
+            newWorkerInfo.setWorkerState(state = WorkerState.Range)
+            clientMap = clientMap + (i -> newWorkerInfo)
+          }
+        }
+      }
+
+      if (waitWhile(() => !isAllWorkersSameState(WorkerState.Range), 100000)) {
         NetworkServer.logger.info("[Range] Try to broadcast range ")
-        val reply = RangeReply(ResultType.SUCCESS,keyranges,addressList)
+        val reply = RangeReply(ResultType.SUCCESS, keyranges, addressList)
         Future.successful(reply)
       } else {
         NetworkServer.logger.warning("[Range] range failed")
@@ -391,33 +411,36 @@ class NetworkServer(executionContext: ExecutionContext, numClients: Int) {
         if (clientMap(i).workerState != state) res = false
       res
     }
-
-    def getkeyranges():Unit = {
-      if(isAllWorkersSameState(WorkerState.Sampling)){
-        val f = Future{
+    /*
+    def getkeyranges(): Unit = {
+      if (isAllWorkersSameState(WorkerState.Sampling)) {
+        val f = Future {
           clientMap.synchronized {
             for (i <- 1 to clientMap.size) {
               val workerInfo = clientMap(i)
               if (workerInfo.ip == workerip && workerInfo.port == workerport) {
-                if(i == 1){
-                  keyranges = new keyRangeGenerator(samples,numClients).generateKeyrange()
+                if (i == 1) {
+                  keyranges = new keyRangeGenerator(samples, numClients)
+                    .generateKeyrange()
                 }
                 val newWorkerInfo = new WorkerInfo(workerip, workerport)
                 newWorkerInfo.setWorkerState(state = WorkerState.Range)
                 clientMap = clientMap + (i -> newWorkerInfo)
-                }
               }
             }
+          }
         }
-        f.onComplete{
+        f.onComplete {
           case Success(_) => {
             NetworkServer.logger.info("[tryPivot] Pivot done successfully")
           }
           case Failure(t) => {
-            NetworkServer.logger.info("[tryPivot] Pivot failed: " + t.getMessage)
+            NetworkServer.logger.info(
+              "[tryPivot] Pivot failed: " + t.getMessage
+            )
           }
         }
       }
-  }
+    }*/
   }
 }

@@ -34,6 +34,7 @@ import scala.concurrent.{Promise, Await}
 import scala.concurrent.duration._
 import scala.io.Source
 import com.google.protobuf.ByteString
+import scala.concurrent._
 
 object NetworkClient {
   def apply(host: String, port: Int): NetworkClient = {
@@ -82,28 +83,44 @@ class NetworkClient private (
     }
   }
 
-  def sendSamples(samplePromise: Promise[Unit], inputFile: String): Unit = {
+  def sendSamples(
+      samplePromise: Promise[Unit],
+      inputFile: String
+  ): Future[Unit] = {
+    val p = Promise[Unit]()
     logger.info("[sendSamples] Try to send sample")
     val replyObserver = new StreamObserver[SamplingReply]() {
       override def onNext(reply: SamplingReply): Unit = {
         if (reply.result == ResultType.SUCCESS) {
           samplePromise.success()
+          print("1")
         }
       }
       override def onError(t: Throwable): Unit = {
-        logger.warning(s"[requestSample] Server response Failed: ${Status.fromThrowable(t)}")
+        logger.warning(
+          s"[requestSample] Server response Failed: ${Status.fromThrowable(t)}"
+        )
         samplePromise.failure(new Exception)
+        print("2")
       }
       override def onCompleted(): Unit = {
         logger.info("[sendSamples] Done sending sample")
+        print("3")
+        p.success(())
       }
     }
     val requestObserver = asyncStub.sampling(replyObserver)
     try {
+      print("4")
       val source = Source.fromFile(inputFile)
       for (line <- source.getLines) {
-        val request = SamplingRequest(addr = Some(Address(localhostIP, port)), sample = ByteString.copyFromUtf8(line))
+        print("5")
+        val request = SamplingRequest(
+          addr = Some(Address(localhostIP, port)),
+          sample = ByteString.copyFromUtf8(line)
+        )
         requestObserver.onNext(request)
+        print("6")
       }
       source.close
     } catch {
@@ -112,10 +129,12 @@ class NetworkClient private (
         throw e
       }
     }
-    requestObserver.onCompleted()
+    print("7")
+    p.future
+    // requestObserver.onCompleted()
   }
 
-  def getRange():RangeReply = {
+  def getRange(): RangeReply = {
     logger.info("[Range] Try to broadcast Ranges from Master")
     val addr = Address(localhostIP, port)
     val request = RangeRequest(Some(addr))

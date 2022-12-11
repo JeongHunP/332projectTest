@@ -25,7 +25,7 @@ import scala.concurrent.ExecutionContext
 import java.net.InetAddress
 import util.control.Breaks.{breakable, break}
 import common.Utils
-import scala.concurrent.{Promise,Await}
+import scala.concurrent.{Promise, Await}
 
 object Worker {
   def main(args: Array[String]): Unit = {
@@ -54,11 +54,11 @@ object Worker {
       }
 
       /*@@@@@ sampling phase @@@@@*/
-      val sampledPath = System.getProperty("user.dir") +"/data/sampled"
-      sampleMaker.makeSamples(inputFilePaths,sampledPath)
+      val sampledPath = System.getProperty("user.dir") + "/data/sampled"
+      sampleMaker.makeSamples(inputFilePaths, sampledPath)
       val samplePromise = Promise[Unit]()
-      client.sendSamples(samplePromise,sampledPath+"/samples")
-      Await.ready(samplePromise.future, Duration.Inf)
+      val fut = client.sendSamples(samplePromise, sampledPath + "/samples")
+      Await.result(fut, Duration.Inf)
 
       /*@@@@@ range phase @@@@@*/
       val rangeReply = client.getRange()
@@ -84,7 +84,8 @@ object Worker {
       val ranges = rangeReply.ranges
       val numWorkers = workers.length
       val shuffleDirs = System.getProperty("user.dir") + "/data/shuffled"
-      val shuffleserver = FileServer(ExecutionContext.global, numWorkers - 1, shuffleDirs)
+      val shuffleserver =
+        FileServer(ExecutionContext.global, numWorkers - 1, shuffleDirs)
       val shuffleInputFilePaths = Utils.getFilePathsFromDir(List(partitionDir))
 
       shuffleserver.start()
@@ -93,12 +94,17 @@ object Worker {
 
       /*@@@@@ shuffling phase2:shuffle files @@@@@*/
       var isShuffleComplete = false
-      for (i <- 0 to workers.length -1){
-        val shuffleclient = FileClient(workers(i).ip, 8000, shuffleInputFilePaths, (i+1).toString)
+      for (i <- 0 to workers.length - 1) {
+        val shuffleclient = FileClient(
+          workers(i).ip,
+          8000,
+          shuffleInputFilePaths,
+          (i + 1).toString
+        )
         shuffleclient.shuffling()
         if (i == workers.length - 1) {
           isShuffleComplete = true
-        }      
+        }
       }
       /*@@@@@ shuffling phase3:shuffle Complete @@@@@*/
       val shuffleCompleteness = client.checkShuffleComplete(isShuffleComplete)

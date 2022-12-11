@@ -4,6 +4,7 @@ import scala.collection.mutable.Buffer
 import protos.network.Range
 import common.Utils
 import com.google.protobuf.ByteString
+import scala.concurrent._
 
 class keyRangeGenerator(
     allSamples: scala.collection.Seq[ByteString],
@@ -12,9 +13,10 @@ class keyRangeGenerator(
   val outputSize = 1000000 // 100MB
   val temp = allSamples.map(x => x.toStringUtf8)
   val sortedSamples = temp.sortWith((s1, s2) => Utils.comparator(s1, s2))
-  
 
-  def generateKeyrange(): Seq[Range] = {
+  def generateKeyrange(): Future[Seq[Range]] = {
+    val p = Promise[Seq[Range]]
+
     val numPoints = numWorkers - 1
     val term = sortedSamples.length / numWorkers
     val remain = sortedSamples.length % numWorkers
@@ -32,10 +34,13 @@ class keyRangeGenerator(
         var el = Range("          ", sortedSamples(points.head))
         ranges = ranges :+ el
       } else {
-        var el = Range(sortedSamples(points(i-1)), sortedSamples(points(i)))
+        var el = Range(sortedSamples(points(i - 1)), sortedSamples(points(i)))
         ranges = ranges :+ el
       }
     }
-    ranges :+ Range(sortedSamples(points.last), "~~~~~~~~~~")
+    ranges = ranges :+ Range(sortedSamples(points.last), "~~~~~~~~~~")
+
+    p.success(ranges)
+    p.future
   }
 }
