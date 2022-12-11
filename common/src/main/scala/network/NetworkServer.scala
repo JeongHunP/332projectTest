@@ -151,6 +151,9 @@ class NetworkServer(executionContext: ExecutionContext, numClients: Int) {
           workerip = request.addr.get.ip
           workerport = request.addr.get.port
           samples = samples :+ request.sample
+          print(workerip)
+          print(workerport)
+          print(samples)
           print("8")
         }
         override def onError(t: Throwable): Unit = {
